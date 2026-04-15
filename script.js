@@ -21,37 +21,43 @@
 
     // ========== CORE NAVIGATION ==========
 
-    function goToSlide(index, direction = 'next') {
+    function goToSlide(index, direction) {
         if (isTransitioning || index === currentSlide || index < 0 || index >= totalSlides) return;
         isTransitioning = true;
 
-        const prevSlide = slides[currentSlide];
-        const nextSlide = slides[index];
+        direction = direction || (index > currentSlide ? 'next' : 'prev');
+
+        const prevSlideEl = slides[currentSlide];
+        const nextSlideEl = slides[index];
+
+        // Reset scroll position for new slide
+        const innerEl = nextSlideEl.querySelector('.slide-inner');
+        if (innerEl) innerEl.scrollTop = 0;
 
         // Exit animation
-        prevSlide.classList.remove('active');
+        prevSlideEl.classList.remove('active');
         if (direction === 'next') {
-            prevSlide.classList.add('exit-left');
+            prevSlideEl.classList.add('exit-left');
         }
 
         // Enter animation
-        nextSlide.style.transform = direction === 'next' ? 'translateX(60px)' : 'translateX(-60px)';
-        nextSlide.classList.add('active');
+        nextSlideEl.style.transform = direction === 'next' ? 'translateX(50px)' : 'translateX(-50px)';
+        nextSlideEl.classList.add('active');
 
         // Force reflow
-        void nextSlide.offsetWidth;
-
-        nextSlide.style.transform = '';
+        void nextSlideEl.offsetWidth;
+        nextSlideEl.style.transform = '';
 
         // Clean up after transition
-        setTimeout(() => {
-            prevSlide.classList.remove('exit-left');
+        setTimeout(function () {
+            prevSlideEl.classList.remove('exit-left');
+            prevSlideEl.style.transform = '';
             currentSlide = index;
             updateSlideCounter();
             updateNavDots();
             updateNavButtons();
             isTransitioning = false;
-        }, 600);
+        }, 500);
     }
 
     function nextSlide() {
@@ -73,8 +79,12 @@
     }
 
     function updateNavDots() {
-        navDots.forEach((dot, i) => {
-            dot.classList.toggle('active', i === currentSlide);
+        navDots.forEach(function (dot, i) {
+            if (i === currentSlide) {
+                dot.classList.add('active');
+            } else {
+                dot.classList.remove('active');
+            }
         });
     }
 
@@ -88,20 +98,28 @@
     // ========== EVENT LISTENERS ==========
 
     // Arrow buttons
-    nextBtn.addEventListener('click', nextSlide);
-    prevBtn.addEventListener('click', prevSlide);
+    nextBtn.addEventListener('click', function (e) {
+        e.preventDefault();
+        e.stopPropagation();
+        nextSlide();
+    });
+
+    prevBtn.addEventListener('click', function (e) {
+        e.preventDefault();
+        e.stopPropagation();
+        prevSlide();
+    });
 
     // Nav dots
-    navDots.forEach(dot => {
-        dot.addEventListener('click', () => {
-            const targetIndex = parseInt(dot.dataset.slide);
-            const direction = targetIndex > currentSlide ? 'next' : 'prev';
-            goToSlide(targetIndex, direction);
+    navDots.forEach(function (dot) {
+        dot.addEventListener('click', function () {
+            var targetIndex = parseInt(dot.dataset.slide);
+            goToSlide(targetIndex);
         });
     });
 
     // Keyboard navigation
-    document.addEventListener('keydown', (e) => {
+    document.addEventListener('keydown', function (e) {
         switch (e.key) {
             case 'ArrowRight':
             case 'ArrowDown':
@@ -127,36 +145,56 @@
         }
     });
 
-    // Mouse wheel navigation (debounced)
-    let wheelTimeout = null;
-    document.addEventListener('wheel', (e) => {
-        if (wheelTimeout) return;
-        wheelTimeout = setTimeout(() => { wheelTimeout = null; }, 800);
+    // Mouse wheel — only on body/slide level, not inside scrollable content
+    var wheelTimeout = null;
 
-        if (e.deltaY > 30) {
+    document.addEventListener('wheel', function (e) {
+        // Don't intercept scroll if user is scrolling inside slide content
+        var activeSlide = slides[currentSlide];
+        var inner = activeSlide ? activeSlide.querySelector('.slide-inner') : null;
+
+        if (inner) {
+            var isScrollable = inner.scrollHeight > inner.clientHeight;
+            if (isScrollable) {
+                var atTop = inner.scrollTop <= 2;
+                var atBottom = inner.scrollTop + inner.clientHeight >= inner.scrollHeight - 2;
+
+                // Only navigate if we're at the edge of scroll
+                if (e.deltaY > 0 && !atBottom) return;
+                if (e.deltaY < 0 && !atTop) return;
+            }
+        }
+
+        if (wheelTimeout) return;
+        wheelTimeout = setTimeout(function () { wheelTimeout = null; }, 1000);
+
+        if (e.deltaY > 20) {
             nextSlide();
-        } else if (e.deltaY < -30) {
+        } else if (e.deltaY < -20) {
             prevSlide();
         }
     }, { passive: true });
 
     // Touch / Swipe navigation
-    let touchStartX = 0;
-    let touchStartY = 0;
+    var touchStartX = 0;
+    var touchStartY = 0;
+    var touchStartTime = 0;
 
-    document.addEventListener('touchstart', (e) => {
+    document.addEventListener('touchstart', function (e) {
         touchStartX = e.touches[0].clientX;
         touchStartY = e.touches[0].clientY;
+        touchStartTime = Date.now();
     }, { passive: true });
 
-    document.addEventListener('touchend', (e) => {
-        const touchEndX = e.changedTouches[0].clientX;
-        const touchEndY = e.changedTouches[0].clientY;
-        const deltaX = touchEndX - touchStartX;
-        const deltaY = touchEndY - touchStartY;
+    document.addEventListener('touchend', function (e) {
+        var touchEndX = e.changedTouches[0].clientX;
+        var touchEndY = e.changedTouches[0].clientY;
+        var deltaX = touchEndX - touchStartX;
+        var deltaY = touchEndY - touchStartY;
+        var elapsed = Date.now() - touchStartTime;
 
-        // Only handle horizontal swipes that are more horizontal than vertical
-        if (Math.abs(deltaX) > Math.abs(deltaY) && Math.abs(deltaX) > 50) {
+        // Only horizontal swipes that are quick and more horizontal than vertical
+        if (Math.abs(deltaX) > Math.abs(deltaY) && Math.abs(deltaX) > 60 && elapsed < 500) {
             if (deltaX < 0) {
                 nextSlide();
             } else {
@@ -165,15 +203,14 @@
         }
     }, { passive: true });
 
-    // ========== FUND BAR ANIMATION ==========
-    // Re-trigger fund bar animation when slide becomes active
-    const observer = new MutationObserver((mutations) => {
-        mutations.forEach((mutation) => {
+    // ========== FUND BAR RE-ANIMATION ==========
+    var observer = new MutationObserver(function (mutations) {
+        mutations.forEach(function (mutation) {
             if (mutation.type === 'attributes' && mutation.attributeName === 'class') {
-                const slide = mutation.target;
+                var slide = mutation.target;
                 if (slide.classList.contains('active') && slide.classList.contains('slide-ask')) {
-                    const fills = slide.querySelectorAll('.fund-fill');
-                    fills.forEach(fill => {
+                    var fills = slide.querySelectorAll('.fund-fill');
+                    fills.forEach(function (fill) {
                         fill.style.animation = 'none';
                         void fill.offsetWidth;
                         fill.style.animation = '';
@@ -183,19 +220,9 @@
         });
     });
 
-    slides.forEach(slide => {
+    slides.forEach(function (slide) {
         observer.observe(slide, { attributes: true, attributeFilter: ['class'] });
     });
 
-    // ========== TOOLTIP ON NAV DOTS ==========
-    navDots.forEach(dot => {
-        dot.addEventListener('mouseenter', (e) => {
-            const title = dot.getAttribute('title');
-            if (title) {
-                dot.setAttribute('data-tooltip', title);
-            }
-        });
-    });
-
-    console.log('🚀 PhoneAddict Pitch Deck initialized — ' + totalSlides + ' slides ready!');
+    console.log('🚀 PhoneAddict Pitch Deck initialized — ' + totalSlides + ' slides');
 })();

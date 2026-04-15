@@ -1,4 +1,4 @@
-// ========== PITCH DECK NAVIGATION SYSTEM  ==========
+// ========== PITCH DECK NAVIGATION SYSTEM ==========
 
 (function () {
     'use strict';
